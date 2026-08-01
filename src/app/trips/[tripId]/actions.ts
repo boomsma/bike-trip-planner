@@ -3,11 +3,17 @@
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, RouteSource } from "@prisma/client";
+import type { LineString, Position } from "geojson";
 import { prisma } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { mergeGpxFiles } from "@/lib/gpx/parse";
+import {
+  generateDistanceLoopCandidates,
+  generatePointToPointRoute,
+  type GeneratedRoute,
+} from "@/lib/routing/ors";
 
 export type UploadGpxState = { error: string | null; warning?: string | null };
 
@@ -32,6 +38,47 @@ async function requireTripOwner(tripId: string) {
   }
 
   return { userId: user.id, trip };
+}
+
+async function persistActiveRoute(params: {
+  tripId: string;
+  source: RouteSource;
+  geojson: LineString;
+  totalDistanceKm: number;
+  elevationGainM: number | null;
+  elevationProfile: { distanceKm: number; elevationM: number }[] | null;
+  gpxSources?: { originalFilename: string; storageUrl: string }[];
+  /** Reuse a pre-generated id — needed when other work (e.g. storage upload
+   * paths) already depends on knowing the id before the DB row is created. */
+  routeId?: string;
+}) {
+  const routeId = params.routeId ?? randomUUID();
+
+  await prisma.$transaction(async (tx) => {
+    await tx.route.updateMany({
+      where: { tripId: params.tripId, isActive: true },
+      data: { isActive: false },
+    });
+
+    await tx.route.create({
+      data: {
+        id: routeId,
+        tripId: params.tripId,
+        source: params.source,
+        isActive: true,
+        geojson: params.geojson as unknown as Prisma.InputJsonValue,
+        totalDistanceKm: params.totalDistanceKm,
+        elevationGainM: params.elevationGainM,
+        elevationProfile: (params.elevationProfile ?? undefined) as
+          | Prisma.InputJsonValue
+          | undefined,
+        ...(params.gpxSources && { gpxSources: { create: params.gpxSources } }),
+      },
+    });
+  });
+
+  revalidatePath(`/trips/${params.tripId}`);
+  return routeId;
 }
 
 export async function uploadGpx(
@@ -76,35 +123,19 @@ export async function uploadGpx(
     uploadedPaths.push(path);
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.route.updateMany({
-      where: { tripId, isActive: true },
-      data: { isActive: false },
-    });
-
-    await tx.route.create({
-      data: {
-        id: routeId,
-        tripId,
-        source: "imported_gpx",
-        isActive: true,
-        geojson: merged.geojson as unknown as Prisma.InputJsonValue,
-        totalDistanceKm: merged.totalDistanceKm,
-        elevationGainM: merged.elevationGainM,
-        elevationProfile: (merged.elevationProfile ?? undefined) as
-          | Prisma.InputJsonValue
-          | undefined,
-        gpxSources: {
-          create: files.map((file, i) => ({
-            originalFilename: file.name,
-            storageUrl: uploadedPaths[i],
-          })),
-        },
-      },
-    });
+  await persistActiveRoute({
+    tripId,
+    routeId,
+    source: "imported_gpx",
+    geojson: merged.geojson,
+    totalDistanceKm: merged.totalDistanceKm,
+    elevationGainM: merged.elevationGainM,
+    elevationProfile: merged.elevationProfile,
+    gpxSources: files.map((file, i) => ({
+      originalFilename: file.name,
+      storageUrl: uploadedPaths[i],
+    })),
   });
-
-  revalidatePath(`/trips/${tripId}`);
 
   const warning =
     merged.maxSegmentGapKm > GAP_WARNING_THRESHOLD_KM
@@ -112,4 +143,75 @@ export async function uploadGpx(
       : null;
 
   return { error: null, warning };
+}
+
+export type GenerateRouteResult = { error: string | null };
+
+export async function generateRouteBetweenPoints(
+  tripId: string,
+  start: Position,
+  end: Position,
+): Promise<GenerateRouteResult> {
+  await requireTripOwner(tripId);
+
+  let route: GeneratedRoute;
+  try {
+    route = await generatePointToPointRoute(start, end);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not generate route" };
+  }
+
+  await persistActiveRoute({
+    tripId,
+    source: "point_to_point",
+    geojson: route.geojson,
+    totalDistanceKm: route.totalDistanceKm,
+    elevationGainM: route.elevationGainM,
+    elevationProfile: route.elevationProfile,
+  });
+
+  return { error: null };
+}
+
+export type LoopCandidate = GeneratedRoute;
+
+export type GenerateLoopCandidatesResult =
+  | { error: string; candidates?: undefined }
+  | { error: null; candidates: LoopCandidate[] };
+
+export async function generateDistanceLoopCandidatesAction(
+  tripId: string,
+  start: Position,
+  targetDistanceKm: number,
+): Promise<GenerateLoopCandidatesResult> {
+  await requireTripOwner(tripId);
+
+  if (!(targetDistanceKm > 0)) {
+    return { error: "Enter a target distance greater than 0" };
+  }
+
+  try {
+    const candidates = await generateDistanceLoopCandidates(start, targetDistanceKm);
+    return { error: null, candidates };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not generate loop candidates" };
+  }
+}
+
+export async function selectDistanceLoop(
+  tripId: string,
+  candidate: LoopCandidate,
+): Promise<GenerateRouteResult> {
+  await requireTripOwner(tripId);
+
+  await persistActiveRoute({
+    tripId,
+    source: "distance_target",
+    geojson: candidate.geojson,
+    totalDistanceKm: candidate.totalDistanceKm,
+    elevationGainM: candidate.elevationGainM,
+    elevationProfile: candidate.elevationProfile,
+  });
+
+  return { error: null };
 }

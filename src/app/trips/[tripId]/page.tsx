@@ -3,10 +3,21 @@ import { notFound, redirect } from "next/navigation";
 import type { LineString } from "geojson";
 import { prisma } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
-import { GpxUploadForm } from "@/components/gpx-upload-form";
+import { RouteBuilder } from "@/components/route-builder";
 import { RouteMap } from "@/components/map/route-map";
 import { ElevationChart } from "@/components/map/elevation-chart";
-import { uploadGpx } from "./actions";
+import {
+  generateDistanceLoopCandidatesAction,
+  generateRouteBetweenPoints,
+  selectDistanceLoop,
+  uploadGpx,
+} from "./actions";
+
+const SOURCE_LABEL: Record<string, string> = {
+  imported_gpx: "Imported GPX",
+  point_to_point: "Generated route",
+  distance_target: "Generated loop",
+};
 
 export default async function TripDetailPage({
   params,
@@ -39,7 +50,11 @@ export default async function TripDetailPage({
   }
 
   const activeRoute = trip.routes[0] ?? null;
+
   const boundUploadGpx = uploadGpx.bind(null, tripId);
+  const boundGeneratePoints = generateRouteBetweenPoints.bind(null, tripId);
+  const boundGenerateLoopCandidates = generateDistanceLoopCandidatesAction.bind(null, tripId);
+  const boundSelectLoop = selectDistanceLoop.bind(null, tripId);
 
   return (
     <main className="flex flex-col gap-8 p-8 max-w-3xl mx-auto">
@@ -52,7 +67,12 @@ export default async function TripDetailPage({
 
       <section className="flex flex-col gap-4">
         <h2 className="text-lg font-medium">Route</h2>
-        <GpxUploadForm action={boundUploadGpx} />
+        <RouteBuilder
+          uploadAction={boundUploadGpx}
+          generatePointsAction={boundGeneratePoints}
+          generateLoopCandidatesAction={boundGenerateLoopCandidates}
+          selectLoopAction={boundSelectLoop}
+        />
 
         {activeRoute && (
           <div className="flex flex-col gap-3">
@@ -60,8 +80,10 @@ export default async function TripDetailPage({
               {activeRoute.totalDistanceKm.toFixed(1)} km
               {activeRoute.elevationGainM != null &&
                 ` · ${Math.round(activeRoute.elevationGainM)} m elevation gain`}{" "}
-              · from{" "}
-              {activeRoute.gpxSources.map((s) => s.originalFilename).join(", ")}
+              ·{" "}
+              {activeRoute.gpxSources.length > 0
+                ? `from ${activeRoute.gpxSources.map((s) => s.originalFilename).join(", ")}`
+                : SOURCE_LABEL[activeRoute.source] ?? activeRoute.source}
             </p>
             <RouteMap geojson={activeRoute.geojson as unknown as LineString} />
             {activeRoute.elevationProfile != null && (
