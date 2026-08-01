@@ -1,9 +1,17 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Map as MapLibreMap } from "maplibre-gl";
+import { Map as MapLibreMap, setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { LineString } from "geojson";
+
+// maplibre-gl's default worker-URL resolution (import.meta.url-based) doesn't
+// survive Turbopack's dev bundling — the browser ends up requesting the
+// current page itself as a JS module ("Failed to load module script...
+// non-JavaScript MIME type text/html", confirmed via DevTools). Pointing it
+// at a same-origin static copy (populated by scripts/copy-maplibre-worker.mjs
+// on every `npm install`) sidesteps bundler resolution entirely.
+setWorkerUrl("/maplibre-gl-worker.mjs");
 
 // OpenFreeMap (openfreemap.org): free, no API key, no signup, production-grade
 // vector tiles. MapLibre's own demotiles.maplibre.org was tried first but its
