@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// Mirrors a row in Supabase's auth.users table (id is the Supabase Auth user id).
+model Profile {
+  id        String   @id @db.Uuid
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ownedTrips  Trip[]           @relation("TripOwner")
+  memberships TripMembership[]
+
+  @@map("profiles")
+}
+
+model Trip {
+  id         String    @id @default(uuid()) @db.Uuid
+  name       String
+  ownerId    String    @map("owner_id") @db.Uuid
+  owner      Profile   @relation("TripOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  numCyclists Int      @default(1) @map("num_cyclists")
+  startDate  DateTime? @map("start_date") @db.Date
+  endDate    DateTime? @map("end_date") @db.Date
+  numDays    Int?      @map("num_days")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  memberships TripMembership[]
+
+  @@map("trips")
+}
+
+enum MembershipRole {
+  owner
+  editor
+  viewer
+}
+
+enum MembershipStatus {
+  pending
+  accepted
+}
+
+model TripMembership {
+  id            String            @id @default(uuid()) @db.Uuid
+  tripId        String            @map("trip_id") @db.Uuid
+  trip          Trip              @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  userId        String?           @map("user_id") @db.Uuid
+  user          Profile?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invitedEmail  String?           @map("invited_email")
+  role          MembershipRole    @default(editor)
+  status        MembershipStatus  @default(pending)
+  createdAt     DateTime          @default(now()) @map("created_at")
+
+  @@unique([tripId, userId])
+  @@map("trip_memberships")
+}
