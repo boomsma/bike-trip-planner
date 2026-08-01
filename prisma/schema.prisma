@@ -63,6 +63,9 @@ model Route {
   totalDistanceKm   Float       @map("total_distance_km")
   elevationGainM    Float?      @map("elevation_gain_m")
   elevationProfile  Json?       @map("elevation_profile")
+  // Reverse-geocoded from the route's start point (Nominatim), cached here so
+  // M5 suggestion generation doesn't re-geocode on every run.
+  countries         String[]    @default([])
   createdAt         DateTime    @default(now()) @map("created_at")
 
   gpxSources GpxSource[]
@@ -157,4 +160,30 @@ model PackingItem {
   createdAt        DateTime        @default(now()) @map("created_at")
 
   @@map("packing_items")
+}
+
+enum SuggestionConditionType {
+  weather_rain
+  weather_cold
+  weather_hot
+  terrain_hilly
+  terrain_mountainous
+  country
+}
+
+// Reference/config data (not per-trip) — seeded via migration, editable
+// directly in the DB to tune wording/coverage without a redeploy. The actual
+// threshold logic (what counts as "cold", "hilly", etc.) lives in
+// lib/suggestions/engine.ts; conditionType just says which computed flag a
+// rule reacts to, and conditionValue narrows it further for "country" rules
+// (the country name to match) — unused for the other condition types.
+model PackingSuggestionRule {
+  id            String                  @id @default(uuid()) @db.Uuid
+  conditionType SuggestionConditionType @map("condition_type")
+  conditionValue String?                @map("condition_value")
+  itemName      String                  @map("item_name")
+  categoryName  String                  @map("category_name")
+  reason        String
+
+  @@map("packing_suggestion_rules")
 }

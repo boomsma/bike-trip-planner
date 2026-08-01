@@ -5,6 +5,8 @@ interface Item {
   name: string;
   quantity: number;
   isChecked: boolean;
+  isSuggested: boolean;
+  suggestionReason: string | null;
 }
 
 interface Category {

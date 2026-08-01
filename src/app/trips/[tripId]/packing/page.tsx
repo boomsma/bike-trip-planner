@@ -4,7 +4,15 @@ import { prisma } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
 import { ensurePackingLists } from "@/lib/packing/ensure-lists";
 import { PackingListView } from "@/components/packing/packing-list-view";
-import { addCategory, addItem, deleteCategory, deleteItem, toggleItem } from "./actions";
+import { SuggestionsButton } from "@/components/packing/suggestions-button";
+import {
+  addCategory,
+  addItem,
+  deleteCategory,
+  deleteItem,
+  generatePackingSuggestions,
+  toggleItem,
+} from "./actions";
 
 export default async function PackingPage({
   params,
@@ -33,6 +41,7 @@ export default async function PackingPage({
   const boundAddItem = addItem.bind(null, tripId);
   const boundToggleItem = toggleItem.bind(null, tripId);
   const boundDeleteItem = deleteItem.bind(null, tripId);
+  const boundGenerateSuggestions = generatePackingSuggestions.bind(null, tripId);
 
   return (
     <main className="flex flex-col gap-8 p-8 max-w-3xl mx-auto">
@@ -42,6 +51,8 @@ export default async function PackingPage({
         </Link>
         <h1 className="text-2xl font-semibold mt-1">Packing list</h1>
       </div>
+
+      <SuggestionsButton action={boundGenerateSuggestions} />
 
       <div className="flex flex-col gap-6">
         <PackingListView
