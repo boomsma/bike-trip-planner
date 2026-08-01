@@ -89,9 +89,14 @@ export default async function TripDetailPage({
             <h1 className="text-2xl font-semibold">{trip.name}</h1>
             <p className="text-sm text-gray-500">{formatTripMeta(trip)}</p>
           </div>
-          <Link href={`/trips/${tripId}/settings`} className="text-sm underline">
-            Settings
-          </Link>
+          <div className="flex gap-4">
+            <Link href={`/trips/${tripId}/packing`} className="text-sm underline">
+              Packing list
+            </Link>
+            <Link href={`/trips/${tripId}/settings`} className="text-sm underline">
+              Settings
+            </Link>
+          </div>
         </div>
       </div>
 

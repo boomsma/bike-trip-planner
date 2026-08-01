@@ -15,8 +15,10 @@ model Profile {
   name      String?
   createdAt DateTime @default(now()) @map("created_at")
 
-  ownedTrips  Trip[]           @relation("TripOwner")
-  memberships TripMembership[]
+  ownedTrips     Trip[]           @relation("TripOwner")
+  memberships    TripMembership[]
+  personalLists  PackingList[]
+  addedItems     PackingItem[]
 
   @@map("profiles")
 }
@@ -35,6 +37,7 @@ model Trip {
 
   memberships TripMembership[]
   routes      Route[]
+  packingLists PackingList[]
 
   @@map("trips")
 }
@@ -102,4 +105,56 @@ model TripMembership {
 
   @@unique([tripId, userId])
   @@map("trip_memberships")
+}
+
+enum PackingListScope {
+  shared
+  personal
+}
+
+// One "shared" list per trip (ownerUserId null), plus one "personal" list per
+// member (ownerUserId set) — lazily created the first time a user opens the
+// packing page for a trip, rather than at trip-creation time.
+model PackingList {
+  id          String           @id @default(uuid()) @db.Uuid
+  tripId      String           @map("trip_id") @db.Uuid
+  trip        Trip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  scope       PackingListScope
+  ownerUserId String?          @map("owner_user_id") @db.Uuid
+  owner       Profile?         @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  categories PackingCategory[]
+
+  @@unique([tripId, scope, ownerUserId])
+  @@map("packing_lists")
+}
+
+model PackingCategory {
+  id            String      @id @default(uuid()) @db.Uuid
+  packingListId String      @map("packing_list_id") @db.Uuid
+  packingList   PackingList @relation(fields: [packingListId], references: [id], onDelete: Cascade)
+  name          String
+  orderIndex    Int         @default(0) @map("order_index")
+
+  items PackingItem[]
+
+  @@map("packing_categories")
+}
+
+model PackingItem {
+  id               String          @id @default(uuid()) @db.Uuid
+  categoryId       String          @map("category_id") @db.Uuid
+  category         PackingCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name             String
+  quantity         Int             @default(1)
+  isChecked        Boolean         @default(false) @map("is_checked")
+  // Reserved for M5 (smart suggestions) — always false/null until then.
+  isSuggested      Boolean         @default(false) @map("is_suggested")
+  suggestionReason String?         @map("suggestion_reason")
+  addedByUserId    String?         @map("added_by_user_id") @db.Uuid
+  addedBy          Profile?        @relation(fields: [addedByUserId], references: [id], onDelete: SetNull)
+  createdAt        DateTime        @default(now()) @map("created_at")
+
+  @@map("packing_items")
 }
