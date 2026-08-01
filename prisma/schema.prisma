@@ -34,8 +34,48 @@ model Trip {
   updatedAt  DateTime  @updatedAt @map("updated_at")
 
   memberships TripMembership[]
+  routes      Route[]
 
   @@map("trips")
+}
+
+enum RouteSource {
+  imported_gpx
+  point_to_point
+  distance_target
+}
+
+// geojson stores a GeoJSON LineString (or MultiLineString for multiple merged tracks).
+// Using a plain Json column rather than a native PostGIS geometry column for now — M1
+// only needs to render the route, not run spatial queries. Revisit as a PostGIS geometry
+// (see plan risk notes on Prisma + PostGIS) once M2/M6 need nearest-point/bounding-box
+// queries; GeoJSON round-trips cleanly to that at that point.
+model Route {
+  id                String      @id @default(uuid()) @db.Uuid
+  tripId            String      @map("trip_id") @db.Uuid
+  trip              Trip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  source            RouteSource
+  isActive          Boolean     @default(true) @map("is_active")
+  geojson           Json
+  totalDistanceKm   Float       @map("total_distance_km")
+  elevationGainM    Float?      @map("elevation_gain_m")
+  elevationProfile  Json?       @map("elevation_profile")
+  createdAt         DateTime    @default(now()) @map("created_at")
+
+  gpxSources GpxSource[]
+
+  @@map("routes")
+}
+
+model GpxSource {
+  id               String   @id @default(uuid()) @db.Uuid
+  routeId          String   @map("route_id") @db.Uuid
+  route            Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  originalFilename String   @map("original_filename")
+  storageUrl       String   @map("storage_url")
+  uploadedAt       DateTime @default(now()) @map("uploaded_at")
+
+  @@map("gpx_sources")
 }
 
 enum MembershipRole {

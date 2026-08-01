@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
@@ -52,7 +53,9 @@ export default async function TripsPage() {
             key={trip.id}
             className="border rounded px-3 py-2 flex justify-between items-center"
           >
-            <span>{trip.name}</span>
+            <Link href={`/trips/${trip.id}`} className="underline">
+              {trip.name}
+            </Link>
             <form
               action={async () => {
                 "use server";
