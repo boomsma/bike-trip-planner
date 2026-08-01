@@ -5,9 +5,13 @@ import { Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { LineString } from "geojson";
 
-// Free, no-API-key demo style — swap for a MapTiler/Stadia style + API key
-// (see plan) once you've signed up for one; this is enough to render routes now.
-const DEMO_STYLE = "https://demotiles.maplibre.org/style.json";
+// OpenFreeMap (openfreemap.org): free, no API key, no signup, production-grade
+// vector tiles. MapLibre's own demotiles.maplibre.org was tried first but its
+// style references a second-hop tiles.json whose vector tiles never actually
+// loaded here — the map rendered nothing but a flat background color (verified
+// via map.isStyleLoaded()/getSource() staying empty indefinitely). OpenFreeMap
+// is a single-hop style and a well-known reliable replacement for exactly this.
+const MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 
 export function RouteMap({ geojson }: { geojson: LineString }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -18,7 +22,7 @@ export function RouteMap({ geojson }: { geojson: LineString }) {
 
     const map = new MapLibreMap({
       container: containerRef.current,
-      style: DEMO_STYLE,
+      style: MAP_STYLE,
       bounds: boundsOf(geojson.coordinates),
       fitBoundsOptions: { padding: 40 },
     });
