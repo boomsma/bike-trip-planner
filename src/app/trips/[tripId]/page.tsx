@@ -19,6 +19,28 @@ const SOURCE_LABEL: Record<string, string> = {
   distance_target: "Generated loop",
 };
 
+function formatTripMeta(trip: {
+  numCyclists: number;
+  startDate: Date | null;
+  endDate: Date | null;
+  numDays: number | null;
+}): string {
+  const cyclists = `${trip.numCyclists} cyclist${trip.numCyclists === 1 ? "" : "s"}`;
+
+  if (trip.startDate && trip.endDate) {
+    const fmt = (d: Date) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    const days =
+      Math.round((trip.endDate.getTime() - trip.startDate.getTime()) / 86_400_000) + 1;
+    return `${fmt(trip.startDate)} – ${fmt(trip.endDate)} (${days} day${days === 1 ? "" : "s"}) · ${cyclists}`;
+  }
+
+  if (trip.numDays) {
+    return `${trip.numDays} day${trip.numDays === 1 ? "" : "s"} · ${cyclists}`;
+  }
+
+  return `${cyclists} · dates not set`;
+}
+
 export default async function TripDetailPage({
   params,
 }: {
@@ -62,7 +84,15 @@ export default async function TripDetailPage({
         <Link href="/trips" className="text-sm underline">
           ← Your trips
         </Link>
-        <h1 className="text-2xl font-semibold mt-1">{trip.name}</h1>
+        <div className="flex justify-between items-start mt-1">
+          <div>
+            <h1 className="text-2xl font-semibold">{trip.name}</h1>
+            <p className="text-sm text-gray-500">{formatTripMeta(trip)}</p>
+          </div>
+          <Link href={`/trips/${tripId}/settings`} className="text-sm underline">
+            Settings
+          </Link>
+        </div>
       </div>
 
       <section className="flex flex-col gap-4">

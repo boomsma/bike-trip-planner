@@ -215,3 +215,53 @@ export async function selectDistanceLoop(
 
   return { error: null };
 }
+
+export type UpdateTripDetailsState = { error: string | null };
+
+export async function updateTripDetails(
+  tripId: string,
+  _prevState: UpdateTripDetailsState,
+  formData: FormData,
+): Promise<UpdateTripDetailsState> {
+  await requireTripOwner(tripId);
+
+  const numCyclists = Number(formData.get("numCyclists"));
+  if (!Number.isInteger(numCyclists) || numCyclists < 1) {
+    return { error: "Number of cyclists must be at least 1" };
+  }
+
+  const planningMode = formData.get("planningMode");
+
+  let startDate: Date | null = null;
+  let endDate: Date | null = null;
+  let numDays: number | null = null;
+
+  if (planningMode === "dates") {
+    const startRaw = formData.get("startDate");
+    const endRaw = formData.get("endDate");
+    if (!startRaw || !endRaw) {
+      return { error: "Enter both a start and end date" };
+    }
+    startDate = new Date(startRaw as string);
+    endDate = new Date(endRaw as string);
+    if (endDate < startDate) {
+      return { error: "End date must be on or after the start date" };
+    }
+  } else {
+    const numDaysRaw = Number(formData.get("numDays"));
+    if (!Number.isInteger(numDaysRaw) || numDaysRaw < 1) {
+      return { error: "Number of days must be at least 1" };
+    }
+    numDays = numDaysRaw;
+  }
+
+  await prisma.trip.update({
+    where: { id: tripId },
+    data: { numCyclists, startDate, endDate, numDays },
+  });
+
+  revalidatePath(`/trips/${tripId}`);
+  revalidatePath(`/trips/${tripId}/settings`);
+
+  return { error: null };
+}
