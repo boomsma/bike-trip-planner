@@ -8,7 +8,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { mergeGpxFiles } from "@/lib/gpx/parse";
 
-export type UploadGpxState = { error: string | null };
+export type UploadGpxState = { error: string | null; warning?: string | null };
+
+const GAP_WARNING_THRESHOLD_KM = 1;
 
 async function requireTripOwner(tripId: string) {
   const supabase = await createClient();
@@ -100,5 +102,11 @@ export async function uploadGpx(
   });
 
   revalidatePath(`/trips/${tripId}`);
-  return { error: null };
+
+  const warning =
+    merged.maxSegmentGapKm > GAP_WARNING_THRESHOLD_KM
+      ? `Note: had to bridge a ${merged.maxSegmentGapKm.toFixed(1)} km gap between two track segments — double check these files belong to the same continuous route.`
+      : null;
+
+  return { error: null, warning };
 }

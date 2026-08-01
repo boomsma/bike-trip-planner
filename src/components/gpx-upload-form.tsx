@@ -16,7 +16,8 @@ export function GpxUploadForm({
   return (
     <form action={formAction} className="flex flex-col gap-2 w-full">
       <label className="flex flex-col gap-1 text-sm">
-        Upload one or more GPX files (combined into a single route, in order)
+        Upload one or more GPX files (automatically chained into one route by
+        matching nearby track endpoints — upload order doesn&apos;t matter)
         <input
           type="file"
           name="files"
@@ -29,6 +30,11 @@ export function GpxUploadForm({
       {state.error && (
         <p className="text-red-600 text-sm" role="alert">
           {state.error}
+        </p>
+      )}
+      {state.warning && (
+        <p className="text-amber-600 text-sm" role="alert">
+          {state.warning}
         </p>
       )}
       <button
