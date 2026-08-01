@@ -7,11 +7,9 @@ import type {
   MultiLineString,
   Position,
 } from "geojson";
+import { buildElevationProfile, haversineKm, type ElevationPoint } from "@/lib/geo/elevation-profile";
 
-export interface ElevationPoint {
-  distanceKm: number;
-  elevationM: number;
-}
+export type { ElevationPoint };
 
 export interface MergedGpx {
   geojson: LineString;
@@ -20,21 +18,6 @@ export interface MergedGpx {
   elevationProfile: ElevationPoint[] | null;
   /** Largest gap the chaining step had to bridge between two segments. */
   maxSegmentGapKm: number;
-}
-
-const EARTH_RADIUS_KM = 6371;
-
-function haversineKm(a: Position, b: Position): number {
-  const [lon1, lat1] = a;
-  const [lon2, lat2] = b;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) ** 2;
-  return 2 * EARTH_RADIUS_KM * Math.asin(Math.sqrt(h));
 }
 
 /** Each <trk>/<rte> (or sub-line of a MultiLineString) becomes its own segment
@@ -120,27 +103,10 @@ function chainSegments(segments: Position[][]): {
 }
 
 /**
- * Consumer GPS/barometric elevation is notoriously noisy — dropouts that snap
- * to 0 for a few points before recovering are common (seen firsthand: bursts
- * like 0 -> 82m -> 0 across ~13 points, clearly not real terrain). A rolling
- * median (not a moving average) rejects these short outlier bursts instead of
- * just diluting them, while still tracking genuine gradual elevation change.
- */
-function medianFilter(values: number[], halfWindow: number): number[] {
-  return values.map((_, i) => {
-    const lo = Math.max(0, i - halfWindow);
-    const hi = Math.min(values.length - 1, i + halfWindow);
-    const window = values.slice(lo, hi + 1).sort((a, b) => a - b);
-    return window[Math.floor(window.length / 2)];
-  });
-}
-
-/**
  * Merges one or more GPX files into a single combined track: every track/route
  * segment across all files is pooled and chained by nearest endpoint (see
- * chainSegments), then total distance (haversine over consecutive points) and,
- * when every point has elevation data, total gain and a distance/elevation
- * profile are computed over the resulting order.
+ * chainSegments), then distance/elevation are computed via buildElevationProfile
+ * (with GPS-noise smoothing enabled, since raw GPX elevation is noisy).
  */
 export function mergeGpxFiles(xmlContents: string[]): MergedGpx {
   const segments: Position[][] = [];
@@ -161,38 +127,16 @@ export function mergeGpxFiles(xmlContents: string[]): MergedGpx {
     throw new Error("Not enough track points to build a route");
   }
 
-  const hasElevation = allCoords.every((c) => typeof c[2] === "number");
-  const smoothedElevations = hasElevation
-    ? medianFilter(
-        allCoords.map((c) => c[2]!),
-        15,
-      )
-    : null;
-
-  let totalDistanceKm = 0;
-  let cumulativeKm = 0;
-  let elevationGainM = 0;
-  const elevationProfile: ElevationPoint[] = smoothedElevations
-    ? [{ distanceKm: 0, elevationM: smoothedElevations[0] }]
-    : [];
-
-  for (let i = 1; i < allCoords.length; i++) {
-    const segmentKm = haversineKm(allCoords[i - 1], allCoords[i]);
-    cumulativeKm += segmentKm;
-    totalDistanceKm += segmentKm;
-
-    if (smoothedElevations) {
-      const gain = smoothedElevations[i] - smoothedElevations[i - 1];
-      if (gain > 0) elevationGainM += gain;
-      elevationProfile.push({ distanceKm: cumulativeKm, elevationM: smoothedElevations[i] });
-    }
-  }
+  const { totalDistanceKm, elevationGainM, elevationProfile } = buildElevationProfile(
+    allCoords,
+    { smoothElevation: true },
+  );
 
   return {
     geojson: { type: "LineString", coordinates: allCoords },
-    totalDistanceKm: Math.round(totalDistanceKm * 100) / 100,
-    elevationGainM: hasElevation ? Math.round(elevationGainM) : null,
-    elevationProfile: hasElevation ? elevationProfile : null,
+    totalDistanceKm,
+    elevationGainM,
+    elevationProfile,
     maxSegmentGapKm: Math.round(maxGapKm * 100) / 100,
   };
 }

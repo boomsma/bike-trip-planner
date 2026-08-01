@@ -3,6 +3,7 @@
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -87,10 +88,12 @@ export async function uploadGpx(
         tripId,
         source: "imported_gpx",
         isActive: true,
-        geojson: merged.geojson,
+        geojson: merged.geojson as unknown as Prisma.InputJsonValue,
         totalDistanceKm: merged.totalDistanceKm,
         elevationGainM: merged.elevationGainM,
-        elevationProfile: merged.elevationProfile ?? undefined,
+        elevationProfile: (merged.elevationProfile ?? undefined) as
+          | Prisma.InputJsonValue
+          | undefined,
         gpxSources: {
           create: files.map((file, i) => ({
             originalFilename: file.name,
